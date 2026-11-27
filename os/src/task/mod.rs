@@ -21,6 +21,9 @@ use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
+/// Maximum syscall id supported by per-task counters.
+pub const MAX_SYSCALL_NUM: usize = 512;
+
 pub use context::TaskContext;
 
 /// The task manager, where all the tasks are managed.
@@ -54,6 +57,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_count: [0; MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +139,22 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Increment the current task's call count for `syscall_id`.
+    fn increase_current_task_syscall_count(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if let Some(count) = inner.tasks[current].syscall_count.get_mut(syscall_id) {
+            *count += 1;
+        }
+    }
+
+    /// Get the current task's call count for `syscall_id`.
+    fn current_task_syscall_count(&self, syscall_id: usize) -> Option<usize> {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_count.get(syscall_id).copied()
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +188,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Increment the current task's syscall counter.
+pub fn increase_current_task_syscall_count(syscall_id: usize) {
+    TASK_MANAGER.increase_current_task_syscall_count(syscall_id);
+}
+
+/// Read the current task's syscall counter.
+pub fn current_task_syscall_count(syscall_id: usize) -> Option<usize> {
+    TASK_MANAGER.current_task_syscall_count(syscall_id)
 }
