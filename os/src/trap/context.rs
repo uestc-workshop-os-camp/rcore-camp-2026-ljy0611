@@ -21,6 +21,7 @@ impl TrapContext {
     pub fn app_init_context(entry: usize, sp: usize) -> Self {
         let mut sstatus = sstatus::read(); // CSR sstatus
         sstatus.set_spp(SPP::User); //previous privilege mode: user mode
+        sstatus.set_spie(true); // enable interrupts after `sret` enters user mode
         let mut cx = Self {
             x: [0; 32],
             sstatus,
